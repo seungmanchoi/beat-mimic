@@ -15,6 +15,7 @@ const LEVEL_CONFIG = [
 ]
 
 const PROGRESS_OFFSET = 100
+const PREPARE_TIME = 600
 
 function getLevelConfig(level: number) {
   return LEVEL_CONFIG.find((c) => level <= c.max) ?? LEVEL_CONFIG[0]
@@ -62,7 +63,8 @@ class GameScene extends Phaser.Scene {
   private progressStartX = 100
   private gameOverText?: Phaser.GameObjects.Text
   private hitText?: Phaser.GameObjects.Text
-
+  private noteTimer?: Phaser.Time.TimerEvent
+  
   constructor(levelConfig: { instruments: string[]; bpm: [number, number] }) {
     super('GameScene')
     this.levelConfig = levelConfig
@@ -75,6 +77,10 @@ class GameScene extends Phaser.Scene {
     this.score = 0
     this.isGameOver = false
     this.noteSprites = []
+    if (this.noteTimer) {
+      this.noteTimer.remove()
+      this.noteTimer = undefined
+    }
     if (this.hitText) {
       this.hitText.destroy()
       this.hitText = undefined
@@ -134,7 +140,6 @@ class GameScene extends Phaser.Scene {
       await this.wait(this.beatDelay)
     }
     this.index = 0
-    this.startTime = this.time.now
     this.startUserPlay()
   }
 
@@ -168,18 +173,17 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({
       targets: this.progressLine,
       x: endX,
-      duration: this.pattern.length * this.beatDelay + PROGRESS_OFFSET,
+      duration: this.pattern.length * this.beatDelay + PREPARE_TIME,
       ease: 'Linear',
     })
-    this.time.addEvent({
-      delay: this.beatDelay,
-      callback: () => {
-        if (this.index < this.noteSprites.length) {
-          const note = this.noteSprites[this.index]
-          this.tweens.add({ targets: note, scale: 1.3, yoyo: true, duration: this.beatDelay / 2 })
-        }
-      },
-      loop: true,
+    this.time.delayedCall(PREPARE_TIME, () => {
+      this.startTime = this.time.now
+      this.highlightNextNote()
+      this.noteTimer = this.time.addEvent({
+        delay: this.beatDelay,
+        callback: () => this.highlightNextNote(),
+        loop: true,
+      })
     })
   }
 
@@ -211,6 +215,10 @@ class GameScene extends Phaser.Scene {
     }
     this.isGameOver = true
     this.tweens.killAll()
+    if (this.noteTimer) {
+      this.noteTimer.remove()
+      this.noteTimer = undefined
+    }
     const width = this.cameras.main.centerX
     const height = this.cameras.main.centerY
     const text = completed ? 'Stage Clear!' : 'Game Over'
@@ -223,6 +231,13 @@ class GameScene extends Phaser.Scene {
       .setDepth(1)
     this.input.keyboard.removeAllListeners()
     this.input.once('pointerdown', () => this.scene.restart())
+  }
+
+  private highlightNextNote() {
+    if (this.index < this.noteSprites.length) {
+      const note = this.noteSprites[this.index]
+      this.tweens.add({ targets: note, scale: 1.3, yoyo: true, duration: this.beatDelay / 2 })
+    }
   }
 
   private playInstrument(key: string) {
