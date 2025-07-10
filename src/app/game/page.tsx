@@ -50,6 +50,9 @@ class GameScene extends Phaser.Scene {
   private score = 0
   private beatDelay = 600
   private readonly levelConfig
+  private noteSprites: Phaser.GameObjects.Arc[] = []
+  private scoreText!: Phaser.GameObjects.Text
+  private progressLine!: Phaser.GameObjects.Line
 
   constructor(levelConfig: { instruments: string[]; bpm: [number, number] }) {
     super('GameScene')
@@ -62,6 +65,7 @@ class GameScene extends Phaser.Scene {
     this.beatDelay = 60000 / bpm
     this.input.keyboard.on('keydown', (event: KeyboardEvent) => this.handleKey(event.key))
     this.generatePattern()
+    this.createNoteVisuals()
     this.playDemonstration()
   }
 
@@ -73,13 +77,36 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  private createNoteVisuals() {
+    const width = this.cameras.main.width
+    const startX = 100
+    const endX = width - 100
+    const step = (endX - startX) / this.pattern.length
+    const y = this.cameras.main.centerY
+    this.scoreText = this.add.text(10, 10, 'Score: 0', { color: '#ffffff' }).setDepth(1)
+    this.pattern.forEach((key, i) => {
+      const instrument = INSTRUMENTS[key]
+      const x = startX + i * step
+      const color = parseInt(instrument.color.replace('#', ''), 16)
+      const circle = this.add.circle(x, y, 20, color).setStrokeStyle(2, 0xffffff)
+      this.add
+        .text(x, y + 30, key, { color: '#ffffff' })
+        .setOrigin(0.5, 0.5)
+      this.noteSprites.push(circle)
+    })
+    this.progressLine = this.add.line(0, y - 40, startX, 0, startX, 80, 0xffffff).setOrigin(0, 0.5)
+  }
+
   private async playDemonstration() {
-    for (const key of this.pattern) {
-      this.playInstrument(key)
+    for (let i = 0; i < this.pattern.length; i += 1) {
+      const note = this.noteSprites[i]
+      this.playInstrument(this.pattern[i])
+      this.tweens.add({ targets: note, scale: 1.3, yoyo: true, duration: this.beatDelay / 2 })
       await this.wait(this.beatDelay)
     }
     this.index = 0
     this.startTime = this.time.now
+    this.startUserPlay()
   }
 
   private handleKey(key: string) {
@@ -92,12 +119,33 @@ class GameScene extends Phaser.Scene {
     if (result.score > 0) {
       this.score += result.score
     }
-    this.add.text(10, 10, `Score: ${this.score}`, { color: '#ffffff' }).setDepth(1)
+    this.scoreText.setText(`Score: ${this.score}`)
     this.playInstrument(key)
     this.index += 1
     if (this.index === this.pattern.length) {
       this.add.text(10, 40, `Final Score: ${this.score}`, { color: '#ffffff' }).setDepth(1)
     }
+  }
+
+  private startUserPlay() {
+    const width = this.cameras.main.width
+    const endX = width - 100
+    this.tweens.add({
+      targets: this.progressLine,
+      x: endX,
+      duration: this.pattern.length * this.beatDelay,
+      ease: 'Linear',
+    })
+    this.time.addEvent({
+      delay: this.beatDelay,
+      callback: () => {
+        if (this.index < this.noteSprites.length) {
+          const note = this.noteSprites[this.index]
+          this.tweens.add({ targets: note, scale: 1.3, yoyo: true, duration: this.beatDelay / 2 })
+        }
+      },
+      loop: true,
+    })
   }
 
   private playInstrument(key: string) {
