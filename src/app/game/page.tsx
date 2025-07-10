@@ -14,6 +14,8 @@ const LEVEL_CONFIG = [
   { max: 18, instruments: ['1', '2', '3', '4', '5', '6'], bpm: [160, 180] },
 ]
 
+const PROGRESS_OFFSET = 100
+
 function getLevelConfig(level: number) {
   return LEVEL_CONFIG.find((c) => level <= c.max) ?? LEVEL_CONFIG[0]
 }
@@ -32,13 +34,16 @@ function judgeHit(
     return { result: 'MISS', score: 0 }
   }
   if (diff <= 50) {
-    return { result: 'PERFECT', score: 100 }
+    return { result: 'EXCELLENT', score: 100 }
   }
   if (diff <= 100) {
-    return { result: 'GREAT', score: 80 }
+    return { result: 'GREAT', score: 70 }
   }
   if (diff <= 150) {
-    return { result: 'GOOD', score: 60 }
+    return { result: 'GOOD', score: 40 }
+  }
+  if (diff <= 200) {
+    return { result: 'BAD', score: 20 }
   }
   return { result: 'MISS', score: 0 }
 }
@@ -54,7 +59,9 @@ class GameScene extends Phaser.Scene {
   private noteSprites: Phaser.GameObjects.Arc[] = []
   private scoreText!: Phaser.GameObjects.Text
   private progressLine!: Phaser.GameObjects.Line
+  private progressStartX = 100
   private gameOverText?: Phaser.GameObjects.Text
+  private hitText?: Phaser.GameObjects.Text
 
   constructor(levelConfig: { instruments: string[]; bpm: [number, number] }) {
     super('GameScene')
@@ -68,6 +75,10 @@ class GameScene extends Phaser.Scene {
     this.score = 0
     this.isGameOver = false
     this.noteSprites = []
+    if (this.hitText) {
+      this.hitText.destroy()
+      this.hitText = undefined
+    }
     if (this.gameOverText) {
       this.gameOverText.destroy()
       this.gameOverText = undefined
@@ -109,7 +120,10 @@ class GameScene extends Phaser.Scene {
         .setOrigin(0.5, 0.5)
       this.noteSprites.push(circle)
     })
-    this.progressLine = this.add.line(0, y - 40, startX, 0, startX, 80, 0xffffff).setOrigin(0, 0.5)
+    this.progressStartX = startX - PROGRESS_OFFSET
+    this.progressLine = this.add
+      .line(this.progressStartX, y - 40, 0, 0, 0, 80, 0xffffff)
+      .setOrigin(0, 0.5)
   }
 
   private async playDemonstration() {
@@ -131,6 +145,7 @@ class GameScene extends Phaser.Scene {
     const expectedKey = this.pattern[this.index]
     const expectedTime = this.startTime + this.index * this.beatDelay
     const result = judgeHit(expectedKey, key, expectedTime, this.time.now)
+    this.showHitResult(result.result)
     if (result.score > 0) {
       this.score += result.score
     }
@@ -149,10 +164,11 @@ class GameScene extends Phaser.Scene {
   private startUserPlay() {
     const width = this.cameras.main.width
     const endX = width - 100
+    this.progressLine.x = this.progressStartX
     this.tweens.add({
       targets: this.progressLine,
       x: endX,
-      duration: this.pattern.length * this.beatDelay,
+      duration: this.pattern.length * this.beatDelay + PROGRESS_OFFSET,
       ease: 'Linear',
     })
     this.time.addEvent({
@@ -164,6 +180,28 @@ class GameScene extends Phaser.Scene {
         }
       },
       loop: true,
+    })
+  }
+
+  private showHitResult(result: string) {
+    if (this.hitText) {
+      this.hitText.destroy()
+    }
+    const color = '#ffffff'
+    this.hitText = this.add
+      .text(this.cameras.main.centerX, this.cameras.main.centerY - 100, result, {
+        color,
+        fontSize: '32px',
+      })
+      .setOrigin(0.5)
+    this.tweens.add({
+      targets: this.hitText,
+      alpha: 0,
+      duration: 500,
+      onComplete: () => {
+        this.hitText?.destroy()
+        this.hitText = undefined
+      },
     })
   }
 
