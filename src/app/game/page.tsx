@@ -48,15 +48,30 @@ class GameScene extends Phaser.Scene {
   private index = 0
   private startTime = 0
   private score = 0
+  private isGameOver = false
   private beatDelay = 600
   private readonly levelConfig
   private noteSprites: Phaser.GameObjects.Arc[] = []
   private scoreText!: Phaser.GameObjects.Text
   private progressLine!: Phaser.GameObjects.Line
+  private gameOverText?: Phaser.GameObjects.Text
 
   constructor(levelConfig: { instruments: string[]; bpm: [number, number] }) {
     super('GameScene')
     this.levelConfig = levelConfig
+  }
+
+  init() {
+    this.pattern = []
+    this.index = 0
+    this.startTime = 0
+    this.score = 0
+    this.isGameOver = false
+    this.noteSprites = []
+    if (this.gameOverText) {
+      this.gameOverText.destroy()
+      this.gameOverText = undefined
+    }
   }
 
   create() {
@@ -122,8 +137,12 @@ class GameScene extends Phaser.Scene {
     this.scoreText.setText(`Score: ${this.score}`)
     this.playInstrument(key)
     this.index += 1
+    if (result.result === 'MISS') {
+      this.gameOver()
+      return
+    }
     if (this.index === this.pattern.length) {
-      this.add.text(10, 40, `Final Score: ${this.score}`, { color: '#ffffff' }).setDepth(1)
+      this.gameOver(true)
     }
   }
 
@@ -146,6 +165,26 @@ class GameScene extends Phaser.Scene {
       },
       loop: true,
     })
+  }
+
+  private gameOver(completed = false) {
+    if (this.isGameOver) {
+      return
+    }
+    this.isGameOver = true
+    this.tweens.killAll()
+    const width = this.cameras.main.centerX
+    const height = this.cameras.main.centerY
+    const text = completed ? 'Stage Clear!' : 'Game Over'
+    this.gameOverText = this.add
+      .text(width, height, `${text}\nScore: ${this.score}\nClick to Restart`, {
+        color: '#ffffff',
+        align: 'center',
+      })
+      .setOrigin(0.5)
+      .setDepth(1)
+    this.input.keyboard.removeAllListeners()
+    this.input.once('pointerdown', () => this.scene.restart())
   }
 
   private playInstrument(key: string) {
